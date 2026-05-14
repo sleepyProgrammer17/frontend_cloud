@@ -23,6 +23,7 @@ import {
   Layers,
   Activity,
   Building2,
+  Tag,
 } from "lucide-react"
 import {
   Area,
@@ -69,6 +70,13 @@ import {
   useDeleteDepartment,
   type DepartmentItem,
 } from "@/hooks/useDepartment"
+import {
+  useCategoryList,
+  useCreateCategory,
+  useUpdateCategory,
+  useDeleteCategory,
+  type CategoryItem,
+} from "@/hooks/useCategory"
 
 // =========================================================
 // Types
@@ -683,6 +691,7 @@ export default function Page() {
               { value: "fees",             icon: <Banknote className="size-3.5" />,     label: "Fees" },
               { value: "overdue-settings", icon: <Settings2 className="size-3.5" />,   label: "Fee Rules" },
               { value: "departments",      icon: <Building2 className="size-3.5" />,   label: "Departments" },
+              { value: "categories",       icon: <Tag className="size-3.5" />,          label: "Categories" },
             ].map(({ value, icon, label }) => (
               <TabsTrigger
                 key={value}
@@ -1090,6 +1099,11 @@ export default function Page() {
           <TabsContent value="departments" className="space-y-4">
             <DepartmentsTab />
           </TabsContent>
+
+          {/* ── Categories ─────────────────────────────────────────────────── */}
+          <TabsContent value="categories" className="space-y-4">
+            <CategoriesTab />
+          </TabsContent>
         </Tabs>
       </div>
     </BaseLayout>
@@ -1330,7 +1344,6 @@ function DepartmentsTab() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
-  // Fetch on mount
   useEffect(() => { fetchAll() }, [fetchAll])
 
   const anyError = error ?? createError ?? updateError ?? deleteError
@@ -1421,7 +1434,6 @@ function DepartmentsTab() {
         </Button>
       </CardHeader>
 
-      {/* Error banner (non-form errors) */}
       {anyError && !formError && (
         <div className="flex items-center gap-2 px-4 py-3 text-xs text-destructive border-b border-border/40 bg-destructive/5">
           <AlertTriangle className="size-3.5 shrink-0" />
@@ -1436,7 +1448,6 @@ function DepartmentsTab() {
         </div>
       )}
 
-      {/* Inline form error */}
       {formError && (
         <div className="px-4 py-2 text-xs text-destructive bg-destructive/8 border-b border-border/40">
           {formError}
@@ -1454,7 +1465,6 @@ function DepartmentsTab() {
           </TableHeader>
           <TableBody>
 
-            {/* New row */}
             {editing === "new" && (
               <TableRow className="bg-muted/30">
                 <TableCell className="text-xs text-muted-foreground italic">—</TableCell>
@@ -1484,7 +1494,6 @@ function DepartmentsTab() {
               </TableRow>
             )}
 
-            {/* Existing rows */}
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
@@ -1495,7 +1504,6 @@ function DepartmentsTab() {
                 ))
               : (departments ?? []).map((dept, i) =>
                   editing === dept.id ? (
-                    // Edit row
                     <TableRow key={dept.id} className="bg-muted/30">
                       <TableCell className="text-xs text-muted-foreground tabular-nums">
                         {dept.id}
@@ -1524,7 +1532,6 @@ function DepartmentsTab() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    // Read row
                     <TableRow key={dept.id} className="text-xs group">
                       <TableCell>
                         <span
@@ -1561,11 +1568,268 @@ function DepartmentsTab() {
                 )
             }
 
-            {/* Empty state */}
             {!isLoading && (departments ?? []).length === 0 && editing !== "new" && (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-muted-foreground py-12 text-sm">
                   No departments yet. Click "Add Department" to create one.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
+// =========================================================
+// Categories Tab
+// =========================================================
+
+function CategoriesTab() {
+  const { data: categories, isLoading, error, fetchAll, clearError } = useCategoryList()
+  const { create, isLoading: creating, error: createError, clearError: clearCreateError } = useCreateCategory()
+  const { update, isLoading: updating, error: updateError, clearError: clearUpdateError } = useUpdateCategory()
+  const { remove, isLoading: deleting, error: deleteError, clearError: clearDeleteError } = useDeleteCategory()
+
+  const [editing, setEditing] = useState<number | "new" | null>(null)
+  const [nameValue, setNameValue] = useState("")
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  const anyError = error ?? createError ?? updateError ?? deleteError
+
+  function startCreate() {
+    setNameValue("")
+    setEditing("new")
+    setFormError(null)
+    clearError()
+    clearCreateError()
+  }
+
+  function startEdit(cat: CategoryItem) {
+    setNameValue(cat.name)
+    setEditing(cat.id)
+    setFormError(null)
+    clearUpdateError()
+  }
+
+  function cancelEdit() {
+    setEditing(null)
+    setFormError(null)
+  }
+
+  async function handleSave() {
+    const trimmed = nameValue.trim()
+    if (!trimmed) {
+      setFormError("Category name is required.")
+      return
+    }
+    setFormError(null)
+
+    if (editing === "new") {
+      const result = await create({ name: trimmed })
+      if (result.ok) {
+        await fetchAll()
+        setEditing(null)
+      } else {
+        setFormError(result.error)
+      }
+    } else if (typeof editing === "number") {
+      const result = await update(editing, { name: trimmed })
+      if (result.ok) {
+        await fetchAll()
+        setEditing(null)
+      } else {
+        setFormError(result.error)
+      }
+    }
+  }
+
+  async function handleDelete(id: number) {
+    setDeletingId(id)
+    clearDeleteError()
+    const result = await remove(id)
+    if (result.ok) {
+      await fetchAll()
+    }
+    setDeletingId(null)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") handleSave()
+    if (e.key === "Escape") cancelEdit()
+  }
+
+  const isSaving = creating || updating
+
+  return (
+    <Card className="border-border/50 shadow-sm rounded-2xl overflow-hidden">
+      <CardHeader className="pb-3 border-b border-border/40 flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Tag className="size-4 text-muted-foreground" />
+            Categories
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Manage categories for books, digital resources, and research
+          </CardDescription>
+        </div>
+        <Button
+          size="sm"
+          onClick={startCreate}
+          disabled={editing === "new"}
+          className="gap-1.5 h-8"
+        >
+          <Plus className="size-3.5" /> Add Category
+        </Button>
+      </CardHeader>
+
+      {anyError && !formError && (
+        <div className="flex items-center gap-2 px-4 py-3 text-xs text-destructive border-b border-border/40 bg-destructive/5">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          {anyError}
+          <Button
+            variant="ghost" size="sm"
+            onClick={() => { clearError(); clearDeleteError(); fetchAll() }}
+            className="ml-auto h-6 text-xs"
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {formError && (
+        <div className="px-4 py-2 text-xs text-destructive bg-destructive/8 border-b border-border/40">
+          {formError}
+        </div>
+      )}
+
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="text-xs w-16">#</TableHead>
+              <TableHead className="text-xs">Name</TableHead>
+              <TableHead className="text-xs text-right w-24">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+
+            {/* New row */}
+            {editing === "new" && (
+              <TableRow className="bg-muted/30">
+                <TableCell className="text-xs text-muted-foreground italic">—</TableCell>
+                <TableCell>
+                  <Input
+                    className="h-7 text-xs max-w-xs"
+                    placeholder="e.g. Science Fiction"
+                    value={nameValue}
+                    onChange={(e) => setNameValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    autoFocus
+                  />
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      size="icon" variant="ghost" className="size-7"
+                      onClick={handleSave} disabled={isSaving}
+                    >
+                      <Check className="size-3.5 text-emerald-500" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="size-7" onClick={cancelEdit}>
+                      <X className="size-3.5" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+
+            {/* Existing rows */}
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                  </TableRow>
+                ))
+              : (categories ?? []).map((cat, i) =>
+                  editing === cat.id ? (
+                    // Edit row
+                    <TableRow key={cat.id} className="bg-muted/30">
+                      <TableCell className="text-xs text-muted-foreground tabular-nums">
+                        {cat.id}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-7 text-xs max-w-xs"
+                          value={nameValue}
+                          onChange={(e) => setNameValue(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          autoFocus
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="icon" variant="ghost" className="size-7"
+                            onClick={handleSave} disabled={isSaving}
+                          >
+                            <Check className="size-3.5 text-emerald-500" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="size-7" onClick={cancelEdit}>
+                            <X className="size-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    // Read row
+                    <TableRow key={cat.id} className="text-xs group">
+                      <TableCell>
+                        <span
+                          className="size-5 inline-flex items-center justify-center rounded-full text-[10px] font-bold"
+                          style={{
+                            background: PALETTE[i % PALETTE.length] + "20",
+                            color: PALETTE[i % PALETTE.length],
+                          }}
+                        >
+                          {i + 1}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-medium">{cat.name}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            size="icon" variant="ghost" className="size-7"
+                            onClick={() => startEdit(cat)}
+                            disabled={editing !== null}
+                          >
+                            <Pencil className="size-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            size="icon" variant="ghost" className="size-7"
+                            onClick={() => handleDelete(cat.id)}
+                            disabled={deletingId === cat.id || deleting}
+                          >
+                            <Trash2 className="size-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                )
+            }
+
+            {/* Empty state */}
+            {!isLoading && (categories ?? []).length === 0 && editing !== "new" && (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center text-muted-foreground py-12 text-sm">
+                  No categories yet. Click "Add Category" to create one.
                 </TableCell>
               </TableRow>
             )}
